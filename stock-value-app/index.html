@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Value Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Stock Value Tracker</h1>
+  <p class="subtitle">Live prices via Yahoo Finance &middot; no API key required</p>
+</header>
+
+<main>
+  <section class="summary" id="summary">
+    <div class="summary-card">
+      <span class="label">Total Value</span>
+      <span class="value" id="total-value">$0.00</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Day Change</span>
+      <span class="value" id="total-change">$0.00</span>
+    </div>
+    <div class="summary-card">
+      <span class="label">Last Updated</span>
+      <span class="value" id="last-updated">&mdash;</span>
+    </div>
+  </section>
+
+  <form id="add-form" class="add-form">
+    <input id="symbol-input" type="text" placeholder="Ticker (e.g. AAPL)" autocomplete="off" required>
+    <input id="shares-input" type="number" placeholder="Shares" min="0" step="any" value="1" required>
+    <button type="submit">Add Holding</button>
+    <button type="button" id="refresh-btn">Refresh All</button>
+    <label class="auto-refresh">
+      <input type="checkbox" id="auto-refresh-toggle">
+      Auto-refresh (60s)
+    </label>
+  </form>
+
+  <p id="error-banner" class="error-banner" hidden></p>
+
+  <table id="holdings-table">
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Shares</th>
+        <th>Price</th>
+        <th>Prev Close</th>
+        <th>Change</th>
+        <th>Value</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="holdings-body">
+      <tr id="empty-row"><td colspan="7" class="empty">No holdings yet &mdash; add a ticker above.</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
