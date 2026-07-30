@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradingView &rarr; Moomoo Paper Trader</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --border:#262a34; --text:#e6e8ec; --muted:#9aa2b1; --up:#2fbf71; --down:#e5484d; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f5f6f8; --panel:#fff; --border:#dde1e8; --text:#1a1d23; --muted:#5c6370; --up:#1a9c56; --down:#cf2b2f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:1.5rem; text-align:center; }
+  h1 { margin:0 0 .25rem; font-size:1.5rem; }
+  .subtitle { color:var(--muted); margin:0; font-size:.85rem; }
+  main { max-width:1000px; margin:0 auto; padding:0 1.5rem 3rem; display:flex; flex-direction:column; gap:1.5rem; }
+  section { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:1rem; }
+  h2 { margin:0 0 .75rem; font-size:1rem; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th, td { text-align:right; padding:.4rem .6rem; border-bottom:1px solid var(--border); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:500; }
+  .status-submitted, .up { color: var(--up); }
+  .status-rejected, .status-rejected_by_broker, .status-error, .down { color: var(--down); }
+  .empty { color:var(--muted); text-align:center; padding:1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TradingView &rarr; Moomoo Paper Trader</h1>
+  <p class="subtitle">Webhook alerts submit paper trades via moomoo OpenD (TrdEnv.SIMULATE)</p>
+</header>
+<main>
+  <section id="account-section">
+    <h2>Paper Account</h2>
+    <div id="account-body">loading&hellip;</div>
+  </section>
+
+  <section>
+    <h2>Positions</h2>
+    <table id="positions-table">
+      <thead><tr><th>Symbol</th><th>Qty</th><th>Cost Price</th><th>Market Price</th><th>P&amp;L</th></tr></thead>
+      <tbody id="positions-body"><tr><td colspan="5" class="empty">loading&hellip;</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Broker Order History</h2>
+    <table id="orders-table">
+      <thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Type</th><th>Status</th><th>Order ID</th></tr></thead>
+      <tbody id="orders-body"><tr><td colspan="6" class="empty">loading&hellip;</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Webhook Log (local audit trail)</h2>
+    <table id="log-table">
+      <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody id="log-body"><tr><td colspan="6" class="empty">loading&hellip;</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+async function getJSON(url) {
+  const res = await fetch(url);
+  return res.json();
+}
+
+function fmt(n, digits = 2) {
+  return (n === null || n === undefined || n === "") ? "—" : Number(n).toFixed(digits);
+}
+
+async function refreshAccount() {
+  const el = document.getElementById("account-body");
+  try {
+    const acc = await getJSON("/api/account");
+    if (acc.error) { el.textContent = "OpenD error: " + acc.error; return; }
+    el.innerHTML = `Cash: <b>$${fmt(acc.cash)}</b> &nbsp;|&nbsp; Total Assets: <b>$${fmt(acc.total_assets)}</b> &nbsp;|&nbsp; Buying Power: <b>$${fmt(acc.power)}</b>`;
+  } catch (e) {
+    el.textContent = "Could not reach app backend.";
+  }
+}
+
+async function refreshPositions() {
+  const body = document.getElementById("positions-body");
+  try {
+    const rows = await getJSON("/api/positions");
+    if (rows.error || !Array.isArray(rows)) { body.innerHTML = `<tr><td colspan="5" class="empty">${rows.error || "no data"}</td></tr>`; return; }
+    if (rows.length === 0) { body.innerHTML = '<tr><td colspan="5" class="empty">No open positions.</td></tr>'; return; }
+    body.innerHTML = rows.map(r => `
+      <tr>
+        <td style="text-align:left">${r.code ?? ""}</td>
+        <td>${r.qty ?? ""}</td>
+        <td>${fmt(r.cost_price)}</td>
+        <td>${fmt(r.nominal_price ?? r.market_val)}</td>
+        <td class="${(r.pl_ratio ?? 0) >= 0 ? 'up' : 'down'}">${fmt(r.pl_ratio)}%</td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">Could not reach app backend.</td></tr>';
+  }
+}
+
+async function refreshOrders() {
+  const body = document.getElementById("orders-body");
+  try {
+    const rows = await getJSON("/api/orders");
+    if (rows.error || !Array.isArray(rows)) { body.innerHTML = `<tr><td colspan="6" class="empty">${rows.error || "no data"}</td></tr>`; return; }
+    if (rows.length === 0) { body.innerHTML = '<tr><td colspan="6" class="empty">No orders yet.</td></tr>'; return; }
+    body.innerHTML = rows.slice(0, 25).map(r => `
+      <tr>
+        <td style="text-align:left">${r.code ?? ""}</td>
+        <td>${r.trd_side ?? ""}</td>
+        <td>${r.qty ?? ""}</td>
+        <td>${r.order_type ?? ""}</td>
+        <td>${r.order_status ?? ""}</td>
+        <td>${r.order_id ?? ""}</td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">Could not reach app backend.</td></tr>';
+  }
+}
+
+async function refreshLog() {
+  const body = document.getElementById("log-body");
+  try {
+    const rows = await getJSON("/api/log");
+    if (rows.length === 0) { body.innerHTML = '<tr><td colspan="6" class="empty">No webhooks received yet.</td></tr>'; return; }
+    body.innerHTML = rows.map(r => `
+      <tr>
+        <td style="text-align:left">${new Date(r.received_at * 1000).toLocaleTimeString()}</td>
+        <td>${r.symbol ?? ""}</td>
+        <td>${r.side ?? ""}</td>
+        <td>${r.qty ?? ""}</td>
+        <td class="status-${r.status}">${r.status}</td>
+        <td style="text-align:left">${r.error ?? r.order_status ?? ""}</td>
+      </tr>`).join("");
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">Could not reach app backend.</td></tr>';
+  }
+}
+
+function refreshAll() {
+  refreshAccount();
+  refreshPositions();
+  refreshOrders();
+  refreshLog();
+}
+
+refreshAll();
+setInterval(refreshAll, 15000);
+</script>
+</body>
+</html>
