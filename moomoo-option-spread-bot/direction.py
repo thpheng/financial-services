@@ -23,7 +23,7 @@ def map_strategy(strategy: str) -> str:
 
 def resolve_direction(ticker: str, recommender_url: str) -> str:
     try:
-        resp = requests.post(f"{recommender_url}/scan", timeout=30)
+        resp = requests.post(f"{recommender_url}/api/scan", timeout=30)
         resp.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise RuntimeError(
