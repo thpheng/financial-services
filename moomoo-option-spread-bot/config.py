@@ -32,8 +32,28 @@ TRADE_UNLOCK_PASSWORD = os.environ.get("TRADE_UNLOCK_PASSWORD", "")
 
 # --- contract & sizing --------------------------------------------------------
 # The exact moomoo contract code, e.g. "US.AMD260116C00150000".
-# Find it in the moomoo app's option chain, or via scripts/find_option_code.py.
+# Leave blank to have contract_selector.py resolve one dynamically at startup
+# instead (nearest expiry within [MIN_DTE_DAYS, MAX_DTE_DAYS], strike closest
+# to the underlying's current price). Setting this manually always wins.
 OPTION_CODE = os.environ.get("OPTION_CODE", "")
+
+# --- dynamic contract resolution (only used when OPTION_CODE is blank) --------
+# The underlying to trade options on.
+UNDERLYING = os.environ.get("UNDERLYING", "US.AMD")
+# "CALL" or "PUT" to force a side. Leave blank to ask StockV3Recommender's
+# rules engine (OptionOperation.md-based) for the current bias each run --
+# see direction.py. If it has no actionable signal, the bot refuses to start
+# rather than guess a direction.
+OPTION_TYPE = os.environ.get("OPTION_TYPE", "").upper()
+# Nearest eligible expiry must be at least this many days out -- avoids 0DTE
+# gamma/theta risk during the buy-hold-sell window this bot needs.
+MIN_DTE_DAYS = _int("MIN_DTE_DAYS", 1)
+# ...and at most this many days out ("within a week").
+MAX_DTE_DAYS = _int("MAX_DTE_DAYS", 7)
+# Base URL of the StockV3Recommender API (./server.sh start in that project),
+# used to resolve OPTION_TYPE when it's left blank.
+RECOMMENDER_URL = os.environ.get("RECOMMENDER_URL", "http://localhost:8000")
+
 QTY = _int("QTY", 1)  # contracts per round trip
 
 # --- pricing ------------------------------------------------------------------

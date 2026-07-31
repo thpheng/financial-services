@@ -48,12 +48,16 @@ and the sell filling. That's what the reprice/force-exit logic in
    pip install -r requirements.txt
    cp .env.example .env
    ```
-4. Find your contract's exact code (don't hand-type an OCC string yourself):
-   ```bash
-   python3 find_option_code.py US.AMD 2026-01-16
-   ```
-   Copy the `code` column value for the strike you want into `OPTION_CODE`
-   in `.env`.
+4. Pick a contract. Either:
+   - **Manually**: look up the exact code (don't hand-type an OCC string yourself):
+     ```bash
+     python3 find_option_code.py US.AMD 2026-01-16
+     ```
+     Copy the `code` column value for the strike you want into `OPTION_CODE` in `.env`.
+   - **Dynamically** (default -- leave `OPTION_CODE` blank): at startup the bot
+     picks the nearest expiry within `MIN_DTE_DAYS`-`MAX_DTE_DAYS` days out and
+     the strike closest to the underlying's current price (ATM). See
+     "Dynamic contract selection" below for how CALL vs PUT gets decided.
 5. Set `STEP_SIZE` in `.env` to the **real** minimum price increment for
    that contract (watch its quote for a few minutes -- if consecutive
    quoted prices move in $0.05 jumps, that's your step; US options are
@@ -63,6 +67,27 @@ and the sell filling. That's what the reprice/force-exit logic in
    ```bash
    python3 main.py
    ```
+
+## Dynamic contract selection
+
+When `OPTION_CODE` is left blank in `.env`, `main.py` resolves one fresh
+each time the bot starts (once, not per-poll -- restart to pick a new
+contract, e.g. after this week's expiry rolls):
+
+1. **Side (CALL/PUT)**: if `OPTION_TYPE` is set in `.env`, that wins.
+   Otherwise `direction.py` calls `StockV3Recommender`'s `/scan` endpoint
+   (the sibling project's OptionOperation.md-based rules engine) for
+   `UNDERLYING`'s current bias. If it comes back "No Trade" or blocked
+   (outside entry window, VIX too high, etc.), the bot refuses to start
+   rather than guess a side -- this bot doesn't generate its own
+   directional signal, it only executes.
+2. **Contract**: `contract_selector.py` asks OpenD for `UNDERLYING`'s
+   expirations, picks the nearest one within `[MIN_DTE_DAYS, MAX_DTE_DAYS]`
+   days out, then the strike closest to the underlying's live price (ATM).
+
+Requires `StockV3Recommender` running (`cd ../../StockV3Recommender &&
+./server.sh start`, default `http://localhost:8000`) whenever `OPTION_TYPE`
+is left blank for auto-direction.
 
 ## Testing without OpenD or a market connection
 
@@ -137,6 +162,10 @@ the last one) to see the actual root cause, fix it, then restart.
 | `BUY_TIMEOUT_SECONDS` | How long to wait for the buy to fill before giving up |
 | `SELL_REPRICE_AFTER_SECONDS` / `SELL_REPRICE_STEP_TICKS` | How aggressively to chase a fill on the sell leg |
 | `MAX_SELL_REPRICES` | When to stop chasing and force an exit at the bid instead |
+| `UNDERLYING` | Underlying to trade options on (dynamic selection only) |
+| `OPTION_TYPE` | Force CALL or PUT; blank = ask StockV3Recommender each run |
+| `MIN_DTE_DAYS` / `MAX_DTE_DAYS` | Eligible expiry window for dynamic selection |
+| `RECOMMENDER_URL` | Where to reach StockV3Recommender's API |
 
 ## Files
 
@@ -144,5 +173,8 @@ the last one) to see the actual root cause, fix it, then restart.
 - `strategy.py` -- the state machine (`SpreadCaptureBot`), pure logic, unit tested
 - `moomoo_client.py` -- the only file that imports `futu`; wraps OpenD quote/trade calls
 - `store.py` -- SQLite round-trip log + summary stats
-- `find_option_code.py` -- looks up the exact contract code for an underlying + expiry
+- `find_option_code.py` -- looks up the exact contract code for an underlying + expiry (manual path)
+- `contract_selector.py` -- dynamic path: nearest-expiry, closest-to-spot contract selection
+- `direction.py` -- dynamic path: asks StockV3Recommender for CALL/PUT bias
 - `tests/test_strategy.py` -- 10 tests against a fake in-memory broker
+- `tests/test_contract_selector.py`, `tests/test_direction.py` -- pure-logic tests for the dynamic path

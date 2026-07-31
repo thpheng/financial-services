@@ -4,6 +4,8 @@ import sys
 import time
 
 import config
+import contract_selector
+import direction
 import store
 from moomoo_client import MoomooBrokerClient
 from strategy import RoundTrip, SpreadCaptureBot
@@ -20,13 +22,40 @@ def _handle_signal(signum, frame):
     _shutdown = True
 
 
+def _resolve_option_code() -> str:
+    """OPTION_CODE in .env always wins. Otherwise resolve dynamically: ask
+    StockV3Recommender for CALL/PUT (unless OPTION_TYPE forces one), then pick
+    the nearest-expiry, closest-to-spot contract for that side."""
+    if config.OPTION_CODE:
+        return config.OPTION_CODE
+
+    option_type = config.OPTION_TYPE
+    if not option_type:
+        ticker = config.UNDERLYING.split(".")[-1]
+        option_type = direction.resolve_direction(ticker, config.RECOMMENDER_URL)
+        log.info("resolved direction for %s: %s (via %s)", ticker, option_type, config.RECOMMENDER_URL)
+
+    code, expiry, strike, dte = contract_selector.resolve_atm_contract(
+        host=config.OPEND_HOST, port=config.OPEND_PORT, underlying=config.UNDERLYING,
+        option_type=option_type, min_dte_days=config.MIN_DTE_DAYS, max_dte_days=config.MAX_DTE_DAYS,
+    )
+    log.info("resolved contract: %s (%s %s strike=%.2f expiry=%s dte=%s)",
+              code, config.UNDERLYING, option_type, strike, expiry, dte)
+    return code
+
+
 def main() -> int:
-    if not config.OPTION_CODE:
-        log.error("OPTION_CODE is not set in .env -- nothing to trade.")
+    try:
+        option_code = _resolve_option_code()
+    except Exception as e:
+        log.error("failed to resolve option contract: %s", e)
+        return 1
+    if not option_code:
+        log.error("no option code resolved -- nothing to trade.")
         return 1
 
     log.info("mode=%s code=%s qty=%s step=%.2f x%s min_spread=%.2f",
-              config.TRADING_MODE, config.OPTION_CODE, config.QTY, config.STEP_SIZE,
+              config.TRADING_MODE, option_code, config.QTY, config.STEP_SIZE,
               config.NUM_STEPS, config.MIN_SPREAD_TO_ENTER)
 
     if config.TRADING_MODE == "REAL":
@@ -39,10 +68,10 @@ def main() -> int:
         acc_index=config.ACC_INDEX, acc_id=config.ACC_ID,
         unlock_password=config.TRADE_UNLOCK_PASSWORD,
     )
-    client.subscribe(config.OPTION_CODE)
+    client.subscribe(option_code)
 
     def on_round_trip(rt: RoundTrip) -> None:
-        rt.code = config.OPTION_CODE
+        rt.code = option_code
         store.log_round_trip(config.DB_PATH, rt)
         edge = (rt.sell_price - rt.buy_price) * rt.qty * 100 if rt.sell_price else None
         log.info(
@@ -55,7 +84,7 @@ def main() -> int:
 
     bot = SpreadCaptureBot(
         client=client,
-        code=config.OPTION_CODE,
+        code=option_code,
         qty=config.QTY,
         step_size=config.STEP_SIZE,
         num_steps=config.NUM_STEPS,
