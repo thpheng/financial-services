@@ -99,6 +99,28 @@ often it's hitting `forced_exit` (a high forced-exit rate means the spread
 usually isn't there by the time the sell leg is ready, i.e. the strategy
 isn't working as hoped).
 
+## "Account does not support trading X"
+
+moomoo accounts can have multiple sub-accounts (e.g. a general simulated
+account vs. one specifically approved for options), and `ACC_INDEX=0` just
+grabs whichever one the API lists first -- not necessarily the right one.
+If an order gets rejected with this error, run:
+```bash
+python3 list_accounts.py
+```
+It lists every account visible to your login with its `trd_env`,
+`sim_acc_type`, and `trdmarket_auth` (what it's actually approved to
+trade). Put the correct one's `acc_id` in `ACC_ID` in `.env` -- that
+targets it precisely instead of relying on list order.
+
+## If the bot stops itself with "N consecutive errors"
+
+That's `MAX_CONSECUTIVE_ERRORS` in `.env` (default 5) doing its job --
+rather than retry a broken order forever and need a manual Ctrl+C, the bot
+cancels any open order and exits cleanly after that many back-to-back
+failed polls. Scroll up in the terminal to the first traceback (not just
+the last one) to see the actual root cause, fix it, then restart.
+
 ## Tuning knobs (all in `.env`)
 
 | Variable | What it controls |

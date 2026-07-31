@@ -36,7 +36,8 @@ def main() -> int:
 
     client = MoomooBrokerClient(
         host=config.OPEND_HOST, port=config.OPEND_PORT, trading_mode=config.TRADING_MODE,
-        acc_index=config.ACC_INDEX, unlock_password=config.TRADE_UNLOCK_PASSWORD,
+        acc_index=config.ACC_INDEX, acc_id=config.ACC_ID,
+        unlock_password=config.TRADE_UNLOCK_PASSWORD,
     )
     client.subscribe(config.OPTION_CODE)
 
@@ -69,12 +70,25 @@ def main() -> int:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
+    consecutive_errors = 0
     try:
         while not _shutdown:
             try:
                 bot.tick()
+                consecutive_errors = 0
             except Exception:
-                log.exception("error during tick -- will retry next poll")
+                consecutive_errors += 1
+                log.exception(
+                    "error during tick (%d/%d consecutive) -- will retry next poll",
+                    consecutive_errors, config.MAX_CONSECUTIVE_ERRORS,
+                )
+                if consecutive_errors >= config.MAX_CONSECUTIVE_ERRORS:
+                    log.error(
+                        "%d consecutive errors -- stopping automatically instead of "
+                        "retrying forever. Check the traceback above, fix the underlying "
+                        "issue, then restart.", consecutive_errors,
+                    )
+                    break
             time.sleep(config.POLL_INTERVAL_SECONDS)
     finally:
         log.info("stopping -- canceling any open orders")

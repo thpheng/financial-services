@@ -19,6 +19,11 @@ def _int(name: str, default: int) -> int:
 OPEND_HOST = os.environ.get("OPEND_HOST", "127.0.0.1")
 OPEND_PORT = _int("OPEND_PORT", 11111)
 ACC_INDEX = _int("ACC_INDEX", 0)
+# Precise account override -- run list_accounts.py to find the right acc_id
+# if orders get rejected with "Account does not support trading X". Leave at
+# 0 to fall back to ACC_INDEX (picks the Nth account in the filtered list,
+# which is not necessarily the one approved for options).
+ACC_ID = _int("ACC_ID", 0)
 
 # "SIMULATE" (paper) or "REAL" (live money) -- start on SIMULATE, always.
 TRADING_MODE = os.environ.get("TRADING_MODE", "SIMULATE").upper()
@@ -59,5 +64,10 @@ SELL_REPRICE_STEP_TICKS = _int("SELL_REPRICE_STEP_TICKS", 1)
 # exposure indefinitely. This can lock in a small loss -- that is the point:
 # a bounded, known loss beats an unbounded, unmanaged one.
 MAX_SELL_REPRICES = _int("MAX_SELL_REPRICES", 5)
+
+# Stop the bot (cleanly, canceling any open order) after this many
+# CONSECUTIVE failed ticks, instead of retrying forever and needing a
+# manual Ctrl+C. Resets to 0 on any successful tick.
+MAX_CONSECUTIVE_ERRORS = _int("MAX_CONSECUTIVE_ERRORS", 5)
 
 DB_PATH = os.environ.get("DB_PATH", "trades.db")

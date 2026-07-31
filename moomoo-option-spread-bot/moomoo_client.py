@@ -42,9 +42,10 @@ class MoomooBrokerClient:
     """Real BrokerClient backed by a moomoo OpenD connection."""
 
     def __init__(self, host: str, port: int, trading_mode: str, acc_index: int = 0,
-                 unlock_password: str = ""):
+                 acc_id: int = 0, unlock_password: str = ""):
         self.trd_env = TrdEnv.SIMULATE if trading_mode.upper() == "SIMULATE" else TrdEnv.REAL
         self._acc_index = acc_index
+        self._acc_id = acc_id
         self.quote_ctx = OpenQuoteContext(host=host, port=port)
         self.trd_ctx = OpenSecTradeContext(host=host, port=port)
         if self.trd_env == TrdEnv.REAL:
@@ -76,7 +77,8 @@ class MoomooBrokerClient:
         trd_side = TrdSide.BUY if side == "BUY" else TrdSide.SELL
         ret, data = self.trd_ctx.place_order(
             price=price, qty=qty, code=code, trd_side=trd_side,
-            order_type="NORMAL", trd_env=self.trd_env, acc_index=self._acc_index,
+            order_type="NORMAL", trd_env=self.trd_env,
+            acc_id=self._acc_id, acc_index=self._acc_index,
         )
         if ret != RET_OK:
             raise RuntimeError(f"place_order failed: {data}")
@@ -84,8 +86,8 @@ class MoomooBrokerClient:
 
     def get_order(self, order_id: str) -> Order:
         ret, data = self.trd_ctx.order_list_query(
-            order_id=order_id, trd_env=self.trd_env, acc_index=self._acc_index,
-            refresh_cache=True,
+            order_id=order_id, trd_env=self.trd_env,
+            acc_id=self._acc_id, acc_index=self._acc_index, refresh_cache=True,
         )
         if ret != RET_OK:
             raise RuntimeError(f"order_list_query failed: {data}")
@@ -102,7 +104,7 @@ class MoomooBrokerClient:
     def modify_order_price(self, order_id: str, qty: float, price: float) -> None:
         ret, msg = self.trd_ctx.modify_order(
             ModifyOrderOp.NORMAL, order_id, qty, price, trd_env=self.trd_env,
-            acc_index=self._acc_index,
+            acc_id=self._acc_id, acc_index=self._acc_index,
         )
         if ret != RET_OK:
             raise RuntimeError(f"modify_order failed: {msg}")
@@ -111,7 +113,7 @@ class MoomooBrokerClient:
         order = self.get_order(order_id)
         ret, msg = self.trd_ctx.modify_order(
             ModifyOrderOp.CANCEL, order_id, order.dealt_qty, order.price,
-            trd_env=self.trd_env, acc_index=self._acc_index,
+            trd_env=self.trd_env, acc_id=self._acc_id, acc_index=self._acc_index,
         )
         if ret != RET_OK:
             raise RuntimeError(f"cancel_order failed: {msg}")
