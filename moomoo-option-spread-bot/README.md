@@ -99,6 +99,13 @@ often it's hitting `forced_exit` (a high forced-exit rate means the spread
 usually isn't there by the time the sell leg is ready, i.e. the strategy
 isn't working as hoped).
 
+## "Get Order list request failed due to high frequency"
+
+moomoo rate-limits `order_list_query` to 10 calls per 30 seconds. The bot
+calls it once per poll while watching an open order, so `POLL_INTERVAL_SECONDS`
+must stay above 3 -- the default is 4 for margin. If you lower it and see
+this error, raise it back up.
+
 ## "Account does not support trading X"
 
 moomoo accounts can have multiple sub-accounts (e.g. a general simulated

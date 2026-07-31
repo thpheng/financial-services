@@ -52,7 +52,10 @@ NUM_STEPS = _int("NUM_STEPS", 1)
 MIN_SPREAD_TO_ENTER = _float("MIN_SPREAD_TO_ENTER", 0.20)
 
 # --- timing / risk management --------------------------------------------------
-POLL_INTERVAL_SECONDS = _float("POLL_INTERVAL_SECONDS", 2.0)
+# moomoo rate-limits order_list_query to 10 calls per 30 seconds; the bot
+# calls it once per poll while watching an order, so this must stay above
+# 3s (30/10) -- 4s leaves comfortable margin.
+POLL_INTERVAL_SECONDS = _float("POLL_INTERVAL_SECONDS", 4.0)
 # If the buy leg hasn't filled at all within this long, cancel and reassess.
 BUY_TIMEOUT_SECONDS = _float("BUY_TIMEOUT_SECONDS", 60.0)
 # If the sell leg hasn't filled within this long, reprice it one step closer
