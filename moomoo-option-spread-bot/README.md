@@ -124,6 +124,22 @@ often it's hitting `forced_exit` (a high forced-exit rate means the spread
 usually isn't there by the time the sell leg is ready, i.e. the strategy
 isn't working as hoped).
 
+## Trade log for backtesting/analysis (`trades.db`)
+
+Two tables, both written live as the bot runs:
+
+- `round_trips` -- one row per completed/aborted buy→sell cycle (outcome):
+  `buy_price`, `sell_price`, `captured_edge`, `forced_exit`.
+- `order_events` -- one row per order action (what actually got submitted):
+  every `SUBMIT` (buy or sell), `REPRICE`, `FORCE_EXIT`, and `CANCEL` (buy
+  timing out unfilled), with the order's price/qty and the live bid/ask at
+  that moment. `trip_seq` is shared between a round trip and the order
+  events that produced it, so you can join the two, e.g. to see how many
+  reprices or cancelled entry attempts preceded a given outcome.
+
+`store.recent_order_events(path, limit=100)` reads the latter back; `main.py`
+also logs every event at INFO level as it happens (`order SUBMIT BUY ...`).
+
 ## "Get Order list request failed due to high frequency"
 
 moomoo rate-limits `order_list_query` to 10 calls per 30 seconds. The bot
@@ -172,7 +188,7 @@ the last one) to see the actual root cause, fix it, then restart.
 - `main.py` -- connects to OpenD, runs the poll loop, handles shutdown (cancels any open order)
 - `strategy.py` -- the state machine (`SpreadCaptureBot`), pure logic, unit tested
 - `moomoo_client.py` -- the only file that imports `futu`; wraps OpenD quote/trade calls
-- `store.py` -- SQLite round-trip log + summary stats
+- `store.py` -- SQLite round-trip + order-event log, summary stats
 - `find_option_code.py` -- looks up the exact contract code for an underlying + expiry (manual path)
 - `contract_selector.py` -- dynamic path: nearest-expiry, closest-to-spot contract selection
 - `direction.py` -- dynamic path: asks StockV3Recommender for CALL/PUT bias

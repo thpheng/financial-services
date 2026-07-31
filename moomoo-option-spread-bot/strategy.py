@@ -38,6 +38,23 @@ class RoundTrip:
     forced_exit: bool = False
     aborted: bool = False
     note: str = ""
+    trip_seq: int = 0
+
+
+@dataclass
+class OrderEvent:
+    """One order-lifecycle action (submit/reprice/cancel/force-exit) -- for
+    backtesting, distinct from RoundTrip which only records the outcome.
+    Shares trip_seq with the RoundTrip it belongs to so the two can be
+    joined."""
+    trip_seq: int
+    side: str    # "BUY" or "SELL"
+    action: str  # "SUBMIT", "REPRICE", "FORCE_EXIT", "CANCEL"
+    order_id: str
+    price: float
+    qty: float
+    bid: float
+    ask: float
 
 
 @dataclass
@@ -53,6 +70,7 @@ class SpreadCaptureBot:
     sell_reprice_step_ticks: int
     max_sell_reprices: int
     on_round_trip: Callable[[RoundTrip], None] = lambda rt: None
+    on_order_event: Callable[[OrderEvent], None] = lambda evt: None
     now_fn: Callable[[], float] = time.time
 
     state: State = field(default=State.IDLE, init=False)
@@ -63,6 +81,7 @@ class SpreadCaptureBot:
     _sell_order_id: Optional[str] = field(default=None, init=False)
     _sell_placed_at: float = field(default=0.0, init=False)
     _sell_reprice_count: int = field(default=0, init=False)
+    _trip_seq: int = field(default=0, init=False)
 
     def tick(self) -> None:
         if self.state == State.IDLE:
@@ -81,10 +100,15 @@ class SpreadCaptureBot:
         buy_price = round(bid + self.num_steps * self.step_size, 2)
         if buy_price >= ask:
             return  # improved price would cross the offer -- no edge left
+        self._trip_seq += 1
         order_id = self.client.place_limit_order(self.code, "BUY", self.qty, buy_price)
         self._buy_order_id = order_id
         self._buy_placed_at = self.now_fn()
         self.state = State.BUY_WORKING
+        self.on_order_event(OrderEvent(
+            trip_seq=self._trip_seq, side="BUY", action="SUBMIT", order_id=order_id,
+            price=buy_price, qty=self.qty, bid=bid, ask=ask,
+        ))
 
     # -- BUY_WORKING: wait for the buy to fill --------------------------------
     def _watch_buy(self) -> None:
@@ -108,12 +132,16 @@ class SpreadCaptureBot:
                 self._place_sell(self._buy_fill_qty)
             else:
                 self.client.cancel_order(self._buy_order_id)
+                self.on_order_event(OrderEvent(
+                    trip_seq=self._trip_seq, side="BUY", action="CANCEL", order_id=self._buy_order_id,
+                    price=order.price, qty=0.0, bid=0.0, ask=0.0,
+                ))
                 self.state = State.IDLE
                 self._buy_order_id = None
 
     # -- transition into SELL_WORKING -----------------------------------------
     def _place_sell(self, qty: float) -> None:
-        _, ask = self.client.get_bid_ask(self.code)
+        bid, ask = self.client.get_bid_ask(self.code)
         sell_price = round(ask - self.num_steps * self.step_size, 2)
         if sell_price <= self._buy_fill_price:
             # market moved against us already -- still place the sell (we must
@@ -124,6 +152,10 @@ class SpreadCaptureBot:
         self._sell_placed_at = self.now_fn()
         self._sell_reprice_count = 0
         self.state = State.SELL_WORKING
+        self.on_order_event(OrderEvent(
+            trip_seq=self._trip_seq, side="SELL", action="SUBMIT", order_id=order_id,
+            price=sell_price, qty=qty, bid=bid, ask=ask,
+        ))
 
     # -- SELL_WORKING: wait for the sell to fill, reprice/force-exit as needed
     def _watch_sell(self) -> None:
@@ -131,6 +163,7 @@ class SpreadCaptureBot:
         if order.status in TERMINAL_FILLED:
             self.on_round_trip(RoundTrip(
                 qty=self._buy_fill_qty, buy_price=self._buy_fill_price, sell_price=order.price,
+                trip_seq=self._trip_seq,
             ))
             self._reset_to_idle()
             return
@@ -147,14 +180,18 @@ class SpreadCaptureBot:
         if self._sell_reprice_count >= self.max_sell_reprices:
             # give up chasing -- cross the spread to force an exit rather than
             # sit on open-ended directional exposure
-            bid, _ = self.client.get_bid_ask(self.code)
+            bid, ask = self.client.get_bid_ask(self.code)
             self.client.modify_order_price(self._sell_order_id, self._buy_fill_qty, bid)
+            self.on_order_event(OrderEvent(
+                trip_seq=self._trip_seq, side="SELL", action="FORCE_EXIT", order_id=self._sell_order_id,
+                price=bid, qty=self._buy_fill_qty, bid=bid, ask=ask,
+            ))
             self._sell_placed_at = self.now_fn()
             forced = self.client.get_order(self._sell_order_id)
             if forced.status in TERMINAL_FILLED:
                 self.on_round_trip(RoundTrip(
                     qty=self._buy_fill_qty, buy_price=self._buy_fill_price,
-                    sell_price=forced.price, forced_exit=True,
+                    sell_price=forced.price, forced_exit=True, trip_seq=self._trip_seq,
                 ))
                 self._reset_to_idle()
             return
@@ -162,9 +199,13 @@ class SpreadCaptureBot:
         # reprice one step closer to the bid to improve fill odds
         current_price = order.price
         new_price = round(current_price - self.sell_reprice_step_ticks * self.step_size, 2)
-        bid, _ = self.client.get_bid_ask(self.code)
+        bid, ask = self.client.get_bid_ask(self.code)
         new_price = max(new_price, bid)
         self.client.modify_order_price(self._sell_order_id, self._buy_fill_qty, new_price)
+        self.on_order_event(OrderEvent(
+            trip_seq=self._trip_seq, side="SELL", action="REPRICE", order_id=self._sell_order_id,
+            price=new_price, qty=self._buy_fill_qty, bid=bid, ask=ask,
+        ))
         self._sell_placed_at = self.now_fn()
         self._sell_reprice_count += 1
 

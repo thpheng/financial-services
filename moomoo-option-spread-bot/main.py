@@ -82,6 +82,14 @@ def main() -> int:
             rt.forced_exit,
         )
 
+    def on_order_event(evt) -> None:
+        evt.code = option_code
+        store.log_order_event(config.DB_PATH, evt)
+        log.info(
+            "order %s %s trip=%s id=%s price=%.2f qty=%s bid=%.2f ask=%.2f",
+            evt.action, evt.side, evt.trip_seq, evt.order_id, evt.price, evt.qty, evt.bid, evt.ask,
+        )
+
     bot = SpreadCaptureBot(
         client=client,
         code=option_code,
@@ -94,6 +102,7 @@ def main() -> int:
         sell_reprice_step_ticks=config.SELL_REPRICE_STEP_TICKS,
         max_sell_reprices=config.MAX_SELL_REPRICES,
         on_round_trip=on_round_trip,
+        on_order_event=on_order_event,
     )
 
     signal.signal(signal.SIGINT, _handle_signal)
