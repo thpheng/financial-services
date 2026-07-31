@@ -10,7 +10,7 @@ first, which is not necessarily the one approved for options.
 import sys
 
 import pandas as pd
-from futu import OpenSecTradeContext, RET_OK
+from futu import OpenSecTradeContext, RET_OK, TrdMarket
 
 import config
 
@@ -19,7 +19,13 @@ def main() -> int:
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 200)
 
-    trd_ctx = OpenSecTradeContext(host=config.OPEND_HOST, port=config.OPEND_PORT)
+    # OpenSecTradeContext defaults to filter_trdmarket='HK', which silently
+    # hides any account (like a US-only paper trading account) that doesn't
+    # include HK in its own market list. This bot only ever trades US
+    # options, so filter on US explicitly instead of the HK default.
+    trd_ctx = OpenSecTradeContext(
+        host=config.OPEND_HOST, port=config.OPEND_PORT, filter_trdmarket=TrdMarket.US,
+    )
     try:
         ret, data = trd_ctx.get_acc_list()
         if ret != RET_OK:

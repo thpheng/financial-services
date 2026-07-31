@@ -15,6 +15,7 @@ from futu import (
     RET_OK,
     SubType,
     TrdEnv,
+    TrdMarket,
     TrdSide,
 )
 
@@ -47,7 +48,10 @@ class MoomooBrokerClient:
         self._acc_index = acc_index
         self._acc_id = acc_id
         self.quote_ctx = OpenQuoteContext(host=host, port=port)
-        self.trd_ctx = OpenSecTradeContext(host=host, port=port)
+        # filter_trdmarket defaults to 'HK' in the SDK, which would hide a
+        # US-only paper trading account entirely -- this bot only ever
+        # trades US options, so filter on US explicitly.
+        self.trd_ctx = OpenSecTradeContext(host=host, port=port, filter_trdmarket=TrdMarket.US)
         if self.trd_env == TrdEnv.REAL:
             if not unlock_password:
                 raise RuntimeError(
