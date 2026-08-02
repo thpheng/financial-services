@@ -75,9 +75,11 @@ each time the bot starts (once, not per-poll -- restart to pick a new
 contract, e.g. after this week's expiry rolls):
 
 1. **Side (CALL/PUT)**: if `OPTION_TYPE` is set in `.env`, that wins.
-   Otherwise `direction.py` calls `StockV3Recommender`'s `/api/scan` endpoint
-   (the sibling project's OptionOperation.md-based rules engine) for
-   `UNDERLYING`'s current bias. If it comes back "No Trade" or blocked
+   Otherwise `direction.py` calls `StockV3Recommender`'s `/api/scan?ticker=...`
+   endpoint (the sibling project's OptionOperation.md-based rules engine) for
+   `UNDERLYING`'s current bias -- passing the ticker directly means it works
+   for any ticker OpenD can quote, not just ones already listed in that
+   project's `watchlist.txt`. If it comes back "No Trade" or blocked
    (outside entry window, VIX too high, etc.), the bot refuses to start
    rather than guess a side -- this bot doesn't generate its own
    directional signal, it only executes.

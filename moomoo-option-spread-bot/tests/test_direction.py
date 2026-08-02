@@ -44,11 +44,15 @@ def test_resolve_direction_returns_option_type_for_actionable_signal():
     with patch("direction.requests.post", return_value=_fake_response(body)) as post:
         result = resolve_direction("AMD", "http://localhost:8000")
     assert result == "CALL"
-    post.assert_called_once_with("http://localhost:8000/api/scan", timeout=30)
+    post.assert_called_once_with(
+        "http://localhost:8000/api/scan", params={"ticker": "AMD"}, timeout=30
+    )
 
 
 def test_resolve_direction_raises_when_no_actionable_signal():
-    body = {"results": [{"ticker": "SPY", "strategy": "Buy Put"}]}
+    # server scanned the ticker (per the `ticker` param) but it came back "No
+    # Trade", which the /scan route filters out of `results` entirely
+    body = {"results": []}
     with patch("direction.requests.post", return_value=_fake_response(body)):
         with pytest.raises(RuntimeError, match="no actionable signal"):
             resolve_direction("AMD", "http://localhost:8000")

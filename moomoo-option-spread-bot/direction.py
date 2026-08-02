@@ -2,6 +2,10 @@
 the underlying is currently a Buy Call or Buy Put setup -- this bot doesn't
 generate its own directional signal, it defers to that one so the two
 projects don't drift apart. Only used when OPTION_TYPE is left blank in .env.
+
+Scans `ticker` directly (via StockV3Recommender's `ticker` query param) so
+this works for any ticker OpenD can quote, not just ones already listed in
+that project's watchlist.txt.
 """
 from typing import Optional
 
@@ -23,7 +27,7 @@ def map_strategy(strategy: str) -> str:
 
 def resolve_direction(ticker: str, recommender_url: str) -> str:
     try:
-        resp = requests.post(f"{recommender_url}/api/scan", timeout=30)
+        resp = requests.post(f"{recommender_url}/api/scan", params={"ticker": ticker}, timeout=30)
         resp.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise RuntimeError(
