@@ -80,9 +80,11 @@ contract, e.g. after this week's expiry rolls):
    `UNDERLYING`'s current bias -- passing the ticker directly means it works
    for any ticker OpenD can quote, not just ones already listed in that
    project's `watchlist.txt`. If it comes back "No Trade" or blocked
-   (outside entry window, VIX too high, etc.), the bot refuses to start
-   rather than guess a side -- this bot doesn't generate its own
-   directional signal, it only executes.
+   (outside entry window, VIX too high, etc.), the bot does **not** refuse
+   to start -- it defaults to `direction.DEFAULT_OPTION_TYPE_ON_NO_SIGNAL`
+   (`CALL`) and logs a `WARNING` making clear that's a default, not a real
+   signal, so it's easy to grep for and review later. Set `OPTION_TYPE`
+   explicitly if you'd rather it not trade at all when there's no signal.
 2. **Contract**: `contract_selector.py` asks OpenD for `UNDERLYING`'s
    expirations, picks the nearest one within `[MIN_DTE_DAYS, MAX_DTE_DAYS]`
    days out, then the strike closest to the underlying's live price (ATM).
@@ -181,7 +183,7 @@ the last one) to see the actual root cause, fix it, then restart.
 | `SELL_REPRICE_AFTER_SECONDS` / `SELL_REPRICE_STEP_TICKS` | How aggressively to chase a fill on the sell leg |
 | `MAX_SELL_REPRICES` | When to stop chasing and force an exit at the bid instead |
 | `UNDERLYING` | Underlying to trade options on (dynamic selection only) |
-| `OPTION_TYPE` | Force CALL or PUT; blank = ask StockV3Recommender each run |
+| `OPTION_TYPE` | Force CALL or PUT; blank = ask StockV3Recommender, defaulting to CALL (logged) if it has no signal |
 | `MIN_DTE_DAYS` / `MAX_DTE_DAYS` | Eligible expiry window for dynamic selection |
 | `RECOMMENDER_URL` | Where to reach StockV3Recommender's API |
 

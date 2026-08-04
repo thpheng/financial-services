@@ -32,7 +32,9 @@ def _resolve_option_code() -> str:
     option_type = config.OPTION_TYPE
     if not option_type:
         ticker = config.UNDERLYING.split(".")[-1]
-        option_type = direction.resolve_direction(ticker, config.RECOMMENDER_URL)
+        option_type, note = direction.resolve_direction(ticker, config.RECOMMENDER_URL)
+        if note:
+            log.warning("DEFAULTED DIRECTION (no real signal): %s", note)
         log.info("resolved direction for %s: %s (via %s)", ticker, option_type, config.RECOMMENDER_URL)
 
     code, expiry, strike, dte = contract_selector.resolve_atm_contract(

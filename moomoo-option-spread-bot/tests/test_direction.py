@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 import requests
 
-from direction import find_ticker_result, map_strategy, resolve_direction
+from direction import DEFAULT_OPTION_TYPE_ON_NO_SIGNAL, find_ticker_result, map_strategy, resolve_direction
 
 
 def test_find_ticker_result_matches():
@@ -42,20 +42,23 @@ def _fake_response(json_body):
 def test_resolve_direction_returns_option_type_for_actionable_signal():
     body = {"results": [{"ticker": "AMD", "strategy": "Buy Call"}]}
     with patch("direction.requests.post", return_value=_fake_response(body)) as post:
-        result = resolve_direction("AMD", "http://localhost:8000")
-    assert result == "CALL"
+        option_type, note = resolve_direction("AMD", "http://localhost:8000")
+    assert option_type == "CALL"
+    assert note is None
     post.assert_called_once_with(
         "http://localhost:8000/api/scan", params={"ticker": "AMD"}, timeout=30
     )
 
 
-def test_resolve_direction_raises_when_no_actionable_signal():
+def test_resolve_direction_defaults_with_note_when_no_actionable_signal():
     # server scanned the ticker (per the `ticker` param) but it came back "No
     # Trade", which the /scan route filters out of `results` entirely
     body = {"results": []}
     with patch("direction.requests.post", return_value=_fake_response(body)):
-        with pytest.raises(RuntimeError, match="no actionable signal"):
-            resolve_direction("AMD", "http://localhost:8000")
+        option_type, note = resolve_direction("AMD", "http://localhost:8000")
+    assert option_type == DEFAULT_OPTION_TYPE_ON_NO_SIGNAL
+    assert note is not None
+    assert "AMD" in note and "no actionable signal" in note
 
 
 def test_resolve_direction_raises_clearly_when_recommender_unreachable():
